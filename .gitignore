@@ -1,0 +1,23 @@
+# Build outputs
+build/
+bin/
+.cache/
+_deps/
+
+# Compiled artifacts
+*.exe
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*~
+Thumbs.db
+Desktop.ini

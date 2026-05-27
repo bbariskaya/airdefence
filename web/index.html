@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RadarSim — 2D PPI Game</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #060a08;
+      color: #9fdf9f;
+      font-family: Consolas, "Courier New", monospace;
+    }
+    header {
+      padding: 10px 16px;
+      border-bottom: 1px solid #1a3d28;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    h1 { margin: 0; font-size: 1.1rem; color: #5f9; }
+    #status { font-size: 0.85rem; color: #7a9; max-width: 520px; }
+    main {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 12px;
+      justify-content: center;
+    }
+    .panel {
+      background: #0c1410;
+      border: 1px solid #1e4d32;
+      border-radius: 4px;
+      padding: 8px;
+    }
+    .panel h2 {
+      margin: 0 0 8px;
+      font-size: 0.75rem;
+      color: #5a8;
+      letter-spacing: 0.08em;
+    }
+    canvas { display: block; border-radius: 2px; }
+    #map { width: 640px; height: 640px; }
+    #ppi { width: 380px; height: 380px; }
+    aside {
+      min-width: 280px;
+      max-width: 320px;
+    }
+    ul { list-style: none; padding: 0; margin: 0; font-size: 0.8rem; }
+    li { padding: 4px 0; border-bottom: 1px solid #142218; }
+    li.hostile { color: #f88; }
+    li.civil { color: #8a8; }
+    .help {
+      margin-top: 12px;
+      font-size: 0.75rem;
+      color: #5a7;
+      line-height: 1.5;
+    }
+    a { color: #6c9; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>RadarSim — 2D air surveillance (sensor-ready logic)</h1>
+    <div id="status">Loading…</div>
+  </header>
+  <main>
+    <div class="panel">
+      <h2>TACTICAL MAP — YOU (blue) vs traffic</h2>
+      <canvas id="map" width="640" height="640"></canvas>
+    </div>
+    <div class="panel">
+      <h2>PPI RADAR — rotating sweep detects aircraft</h2>
+      <canvas id="ppi" width="380" height="380"></canvas>
+    </div>
+    <aside class="panel">
+      <h2>TRACK LIST</h2>
+      <ul id="tracks"></ul>
+      <div class="help">
+        <strong>Controls:</strong> W/A/S/D or arrows — fly<br />
+        Space — pause<br /><br />
+        Green sweep hits a target → <em>blip</em> on PPI.<br />
+        Repeated hits → <em>track</em> (like real STT).<br />
+        Red = hostile, gray = civil (IFF).<br /><br />
+        No install — same math as C++ <code>radar_core</code>.<br />
+        C++ build: <code>build.bat</code> (needs CMake).
+      </div>
+    </aside>
+  </main>
+  <script src="js/radar-engine.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

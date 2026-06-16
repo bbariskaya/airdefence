@@ -92,7 +92,7 @@ void RadarEngine::update_tracks(const std::vector<Detection>& hits) {
         } else {
             // New track
             Track t;
-            t.id = static_cast<std::int32_t>(tracks_.size() + 1);
+            t.id = h.target_id;  // Use the original threat/aircraft ID
             t.range_m = h.range_m;
             t.azimuth_deg = h.azimuth_deg;
             t.confidence = 0.50f;  // Start higher

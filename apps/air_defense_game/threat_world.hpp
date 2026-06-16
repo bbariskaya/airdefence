@@ -19,6 +19,7 @@ struct Threat {
     float rcs_m2;
     std::string callsign;
     bool destroyed;
+    float explosion_timer = 0.f;  // Time since destruction for explosion effect
 };
 
 /**
@@ -36,13 +37,14 @@ public:
     const std::vector<Threat>& threats() const { return threats_; }
     std::vector<Threat>& threats_mut() { return threats_; }
     Threat* threat_by_id(std::int32_t id);
+    const Threat* threat_by_id(std::int32_t id) const;
 
     void spawn_threat();
     void destroy_threat(std::int32_t id);
 
     // Configuration
-    float spawn_interval_sec = 3.5f;
-    float detection_range_m = 120000.f;
+    float spawn_interval_sec = 5.0f;  // Slower spawns - fewer threats at once
+    float detection_range_m = 200000.f;  // 200 km - realistic air defense range
     float threat_speed_min_mps = 300.f;
     float threat_speed_max_mps = 500.f;
     float threat_rcs_min_m2 = 0.5f;

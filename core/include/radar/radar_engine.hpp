@@ -22,7 +22,7 @@ public:
         float range_resolution_m;
         Config()
             : max_range_m(120000.f),
-              beam_width_deg(3.f),
+              beam_width_deg(30.f),  // Wider beam for better coverage
               sweep_deg_per_sec(48.f),
               detection_threshold(0.18f),
               range_resolution_m(500.f) {}

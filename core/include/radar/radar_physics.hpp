@@ -10,7 +10,7 @@ namespace radar {
  * Recalibrate kRadarCal when you measure your front-end (anechoic chamber or known target).
  */
 struct RadarPhysics {
-    static constexpr float kRadarCal = 5e17f;
+    static constexpr float kRadarCal = 1e21f;  // Very high sensitivity for long-range detection
     static constexpr float kRangeFloor = 1e12f;
     static constexpr float kMinRangeM = 800.f;
     static constexpr float kDefaultMaxRangeM = 100000.f;

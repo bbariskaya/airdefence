@@ -17,12 +17,9 @@ public:
 
     // Input handling (call each frame)
     void handle_target_selection(std::int32_t track_id);
-    void handle_fire_command();
 
     // State getters
     std::int32_t selected_target_id() const { return selected_target_id_; }
-    int ammo_count() const { return ammo_count_; }
-    float reload_timer_sec() const { return reload_timer_sec_; }
     float battery_health() const { return battery_health_; }
     bool can_fire() const;
 
@@ -32,8 +29,6 @@ public:
 
     // Configuration
     float battery_max_health = 100.f;
-    int max_ammo = 12;
-    float reload_time_sec = 2.5f;
     float damage_per_hit = 25.f;
 
     // Statistics
@@ -42,8 +37,6 @@ public:
 
 private:
     std::int32_t selected_target_id_ = -1;
-    int ammo_count_ = 12;
-    float reload_timer_sec_ = 0.f;
     float battery_health_ = 100.f;
 };
 

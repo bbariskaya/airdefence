@@ -5,6 +5,8 @@
 #include <vector>
 
 namespace air_defense {
+class ThreatWorld;
+class ThreatWorld;
 
 /**
  * Represents an active interceptor missile in flight.
@@ -18,6 +20,8 @@ struct Interceptor {
     float lifetime_sec;
     float max_lifetime_sec;
     bool destroyed;
+    float trail_x_m = 0.f;  // Previous position for trail visualization
+    float trail_y_m = 0.f;
     std::int32_t target_id;  // Which threat is this interceptor aimed at (-1 if no target)
 
     bool is_alive() const { return !destroyed && lifetime_sec < max_lifetime_sec; }
@@ -31,7 +35,9 @@ public:
     InterceptorManager();
 
     void tick(float dt_sec);
+    void tick(float dt_sec, const ThreatWorld& world);
     void fire_interceptor(float from_x, float from_y, float target_x, float target_y, float target_vx, float target_vy);
+    void fire_interceptor(float from_x, float from_y, float target_x, float target_y, float target_vx, float target_vy, std::int32_t target_id);
 
     const std::vector<Interceptor>& interceptors() const { return interceptors_; }
     std::vector<Interceptor>& interceptors() { return interceptors_; }
@@ -39,8 +45,8 @@ public:
     void destroy_interceptor(std::int32_t id);
 
     // Configuration
-    float missile_speed_mps = 800.f;  // Interception missile speed
-    float blast_radius_m = 200.f;    // Proximity detonation radius
+    float missile_speed_mps = 1200.f;  // Faster missiles
+    float blast_radius_m = 500.f;    // Larger blast radius
     float max_missile_lifetime_sec = 120.f;
 
     // Statistics

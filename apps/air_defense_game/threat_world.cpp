@@ -20,10 +20,17 @@ void ThreatWorld::tick(float dt_sec) {
 
     // Update threat positions
     update_threat_positions(dt_sec);
+    
+    // Update explosion timers for destroyed threats
+    for (auto& threat : threats_) {
+        if (threat.destroyed) {
+            threat.explosion_timer += dt_sec;
+        }
+    }
 
-    // Remove destroyed threats
+    // Remove destroyed threats after explosion animation completes
     threats_.erase(std::remove_if(threats_.begin(), threats_.end(),
-                                  [](const Threat& t) { return t.destroyed; }),
+                                  [](const Threat& t) { return t.destroyed && t.explosion_timer > 0.5f; }),
                    threats_.end());
 }
 

@@ -34,10 +34,11 @@ private:
     std::deque<float> sweep_trail_;
     std::vector<Blip> current_blips_;
 
-    void draw_tactical_map(const ThreatWorld& world, float radar_az);
+    void draw_tactical_map(const ThreatWorld& world, float radar_az, const InterceptorManager& missiles);
     void draw_ppi(const radar::RadarEngine& engine,
                   const std::vector<Blip>& blips,
-                  const InterceptorManager& missiles);
+                  const InterceptorManager& missiles,
+                  const ThreatWorld& world);
     void draw_status_panel(const radar::RadarEngine& engine,
                            const BatteryController& battery,
                            const ThreatWorld& world);

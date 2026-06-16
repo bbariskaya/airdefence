@@ -13,12 +13,13 @@
 namespace {
 constexpr int kW = 1280;
 constexpr int kH = 800;
-constexpr float kMaxRange = 120000.f;
+constexpr float kMaxRange = 200000.f;  // 200 km
 
 struct UIState {
     bool paused = false;
     bool game_over = false;
     float game_over_timer = 0.f;
+    float fire_cooldown = 0.f;  // Time between shots (seconds)
 };
 
 /**
@@ -102,20 +103,6 @@ int main() {
     while (!WindowShouldClose()) {
         // Input handling
         if (IsKeyPressed(KEY_ESCAPE)) break;
-        if (IsKeyPressed(KEY_SPACE) && !ui_state.game_over) {
-            // Fire interceptor at selected target
-            if (battery.selected_target_id() >= 0 && battery.can_fire()) {
-                // Find target threat
-                air_defense::Threat* target = threat_world.threat_by_id(battery.selected_target_id());
-                if (target) {
-                    // Fire from battery (origin) at threat position
-                    interceptor_mgr.fire_interceptor(0.f, 0.f,
-                                                     target->x_m, target->y_m,
-                                                     target->vx_mps, target->vy_mps);
-                    battery.handle_fire_command();
-                }
-            }
-        }
         if (IsKeyPressed(KEY_R)) {
             // Reset game
             threat_world = air_defense::ThreatWorld();
@@ -132,23 +119,19 @@ int main() {
             ui_state.paused = !ui_state.paused;
         }
 
-        // Mouse click for targeting
-        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !ui_state.game_over) {
-            std::int32_t track_id = get_track_at_position(engine, threat_world,
-                                                          GetMouseX(), GetMouseY());
-            if (track_id >= 0) {
-                battery.handle_target_selection(track_id);
-            }
-        }
-
         // Game update
         float dt = GetFrameTime();
         if (!ui_state.paused && !ui_state.game_over) {
             // Update world
             threat_world.tick(dt);
             engine.tick(dt);
-            interceptor_mgr.tick(dt);
+            interceptor_mgr.tick(dt, threat_world);
             battery.tick(dt);
+            
+            // Update fire cooldown
+            if (ui_state.fire_cooldown > 0.f) {
+                ui_state.fire_cooldown -= dt;
+            }
 
             // Collect blip ages
             blip_ages.clear();
@@ -157,6 +140,31 @@ int main() {
             }
             for (auto& age : blip_ages) {
                 age += dt;
+            }
+
+            // AUTO-TARGETING: Find nearest high-confidence track
+            float best_range = 1e9f;
+            std::int32_t best_track_id = -1;
+            for (const auto& t : engine.tracks()) {
+                if (t.confidence > 0.3f && t.range_m < best_range) {
+                    best_range = t.range_m;
+                    best_track_id = t.id;
+                }
+            }
+            
+            // Set target and auto-fire if we have a target and cooldown is up
+            if (best_track_id >= 0 && ui_state.fire_cooldown <= 0.f) {
+                battery.handle_target_selection(best_track_id);
+                if (battery.can_fire()) {
+                    air_defense::Threat* target = threat_world.threat_by_id(best_track_id);
+                    if (target) {
+                        interceptor_mgr.fire_interceptor(0.f, 0.f,
+                                                         target->x_m, target->y_m,
+                                                         target->vx_mps, target->vy_mps,
+                                                         best_track_id);
+                        ui_state.fire_cooldown = 0.10f;  // 100ms between shots
+                    }
+                }
             }
 
             // Check collisions: interceptors vs threats
@@ -169,6 +177,7 @@ int main() {
                     if (check_collision(missile, threat, interceptor_mgr.blast_radius_m)) {
                         missile.destroyed = true;
                         threat.destroyed = true;
+                        threat.explosion_timer = 0.f;  // Start explosion effect
                         battery.total_intercepted++;
                         break;
                     }

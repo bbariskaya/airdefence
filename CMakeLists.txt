@@ -16,6 +16,8 @@ target_link_libraries(radar_console PRIVATE radar_core)
 # Debug/headless air defense game (no GUI)
 add_executable(air_defense_debug
     apps/air_defense_game/main_debug.cpp
+    apps/air_defense_game/game_simulator.cpp
+    apps/air_defense_game/ballistics.cpp
     apps/air_defense_game/threat_world.cpp
     apps/air_defense_game/interceptor.cpp
     apps/air_defense_game/battery_controller.cpp
@@ -26,6 +28,8 @@ target_link_libraries(air_defense_debug PRIVATE radar_core)
 # Unit tests
 add_executable(test_unit
     apps/tests/test_unit.cpp
+    apps/air_defense_game/game_simulator.cpp
+    apps/air_defense_game/ballistics.cpp
     apps/air_defense_game/threat_world.cpp
     apps/air_defense_game/interceptor.cpp
     apps/air_defense_game/battery_controller.cpp
@@ -36,12 +40,26 @@ target_link_libraries(test_unit PRIVATE radar_core)
 # Integration tests
 add_executable(test_integration
     apps/tests/test_integration.cpp
+    apps/air_defense_game/game_simulator.cpp
+    apps/air_defense_game/ballistics.cpp
     apps/air_defense_game/threat_world.cpp
     apps/air_defense_game/interceptor.cpp
     apps/air_defense_game/battery_controller.cpp
 )
 target_include_directories(test_integration PRIVATE apps/air_defense_game)
 target_link_libraries(test_integration PRIVATE radar_core)
+
+# System tests (full pipeline, no GUI)
+add_executable(test_system
+    apps/tests/test_system.cpp
+    apps/air_defense_game/game_simulator.cpp
+    apps/air_defense_game/ballistics.cpp
+    apps/air_defense_game/threat_world.cpp
+    apps/air_defense_game/interceptor.cpp
+    apps/air_defense_game/battery_controller.cpp
+)
+target_include_directories(test_system PRIVATE apps/air_defense_game)
+target_link_libraries(test_system PRIVATE radar_core)
 
 option(RADAR_BUILD_GRAPHICS "Build Raylib PPI game" ON)
 if(RADAR_BUILD_GRAPHICS)
@@ -62,10 +80,12 @@ if(RADAR_BUILD_GRAPHICS)
 
     add_executable(air_defense_game
         apps/air_defense_game/main.cpp
+        apps/air_defense_game/game_simulator.cpp
         apps/air_defense_game/threat_world.cpp
         apps/air_defense_game/interceptor.cpp
         apps/air_defense_game/battery_controller.cpp
         apps/air_defense_game/game_hud.cpp
+        apps/air_defense_game/ballistics.cpp
     )
     target_include_directories(air_defense_game PRIVATE apps/air_defense_game)
     target_link_libraries(air_defense_game PRIVATE radar_core raylib)

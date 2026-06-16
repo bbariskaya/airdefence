@@ -47,9 +47,11 @@ void RadarEngine::process_sweep(const std::vector<AircraftState>& world) {
         if (range < RadarPhysics::kMinRangeM || range > cfg_.max_range_m) continue;
 
         float az = normalize_angle(rad2deg(std::atan2(ac.x_m, ac.y_m)));
-        float delta = std::fabs(az - sweep_az_);
-        if (delta > 180.f) delta = 360.f - delta;
-        if (delta > beam * 0.5f) continue;
+        if (!cfg_.omnidirectional_search) {
+            float delta = std::fabs(az - sweep_az_);
+            if (delta > 180.f) delta = 360.f - delta;
+            if (delta > beam * 0.5f) continue;
+        }
 
         const float r4 = range * range * range * range;
         float amp = ac.rcs_m2 * RadarPhysics::kRadarCal / (RadarPhysics::kRangeFloor + r4);

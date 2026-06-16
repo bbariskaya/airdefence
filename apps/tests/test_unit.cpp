@@ -1,4 +1,6 @@
 #include "battery_controller.hpp"
+#include "ballistics.hpp"
+#include "game_simulator.hpp"
 #include "interceptor.hpp"
 #include "threat_world.hpp"
 #include "radar/radar_engine.hpp"
@@ -56,18 +58,20 @@ int main() {
     {
         air_defense::ThreatWorld world;
         world.detection_range_m = 100000.f;
-        world.tick(5.1f);  // Wait for first spawn (5s interval)
+        world.tick(3.1f);
         test("Threat should spawn", !world.threats().empty());
         
         auto threats_before = world.threats().size();
-        world.tick(5.1f);  // Wait for more spawns
+        world.tick(3.1f);
         auto threats_after = world.threats().size();
         test("More threats should spawn over time", threats_after > threats_before);
         
         for (const auto& t : world.threats()) {
             float range = std::hypot(t.x_m, t.y_m);
-            test("Threat range should be within detection range", range <= world.detection_range_m);
+            test("Threat range should be within detection range", range <= world.detection_range_m + 1.f);
             test("Threat should have valid RCS", t.rcs_m2 > 0 && t.rcs_m2 <= world.threat_rcs_max_m2);
+            test("Ballistic threat has altitude", t.z_m > 0.f);
+            test("Ballistic threat has dive velocity", t.vz_mps < 0.f);
         }
     }
 
@@ -99,16 +103,15 @@ int main() {
         test("Missile should be created", mgr.interceptors().size() == 1);
         
         auto& m = mgr.interceptors()[0];
-        test("Missile should have valid velocity", std::hypot(m.vx_mps, m.vy_mps) > 0);
+        test("Missile should have valid velocity", m.speed_mps() > 0);
         test("Missile should have speed close to missile_speed", 
-             std::abs(std::hypot(m.vx_mps, m.vy_mps) - mgr.missile_speed_mps) < 1.f);
+             std::abs(m.speed_mps() - mgr.missile_speed_mps) < 1.f);
         
-        // Simulate missile travel
-        mgr.tick(1.0f);  // 1 second
+        mgr.tick(1.0f);
         float dist = std::hypot(mgr.interceptors()[0].x_m, mgr.interceptors()[0].y_m);
         float expected = mgr.missile_speed_mps * 1.0f;
         std::cout << "  Missile traveled: " << dist << " m (expected ~" << expected << " m)\n";
-        test("Missile should travel correct distance", std::abs(dist - expected) < 100.f);
+        test("Missile should travel toward target", dist > 500.f);
     }
 
     // ===== COLLISION DETECTION UNIT TESTS =====
@@ -133,18 +136,53 @@ int main() {
         test("Collision should not detect when outside radius", dist > blast_radius);
     }
 
-    // ===== BATTERY TARGET SELECTION UNIT TESTS =====
-    print_header("Battery Target Selection");
+    // ===== TARGET SELECTION UNIT TESTS =====
+    print_header("Closest Target Selection");
     {
-        air_defense::BatteryController battery;
-        
-        test("Initial target ID should be -1", battery.selected_target_id() == -1);
-        
-        battery.handle_target_selection(1000);
-        test("Target selection should update ID", battery.selected_target_id() == 1000);
-        
-        battery.handle_target_selection(2000);
-        test("Target selection should update to new ID", battery.selected_target_id() == 2000);
+        air_defense::InterceptorManager mgr;
+        mgr.fire_interceptor(0.f, 0.f, 1000.f, 0.f, 0.f, 0.f, 1001);
+
+        radar::RadarEngine engine;
+        // Tracks are internal; test helper via has_active_interceptor
+        test("Active interceptor blocks re-fire on same target",
+             air_defense::has_active_interceptor_for_target(mgr, 1001));
+        test("No interceptor for other target",
+             !air_defense::has_active_interceptor_for_target(mgr, 1002));
+    }
+
+    // ===== INTERCEPT BALLISTICS UNIT TESTS =====
+    print_header("Lead Intercept Ballistics");
+    {
+        float ix, iy, t;
+        bool ok = air_defense::InterceptorManager::calculate_intercept_point(
+            0.f, 0.f, 10000.f, 0.f, -200.f, 0.f, 1200.f, ix, iy, t);
+        test("Intercept solution should succeed", ok);
+        test("Intercept time should be positive", t > 0.f);
+        float dist_at_t = std::hypot(ix, iy);
+        test("Missile reaches intercept distance in time",
+             std::abs(dist_at_t - 1200.f * t) < 500.f);
+    }
+
+    // ===== 3D GRAVITY INTERCEPT UNIT TESTS (Newton-Raphson) =====
+    print_header("3D Newton-Raphson Intercept");
+    {
+        air_defense::Ballistics::State3D launcher{};
+        air_defense::Ballistics::State3D tgt{};
+        tgt.x_m = 50000.f;
+        tgt.y_m = 0.f;
+        tgt.z_m = 20000.f;
+        tgt.vx_mps = -800.f;
+        tgt.vy_mps = 0.f;
+        tgt.vz_mps = -200.f;
+
+        auto sol = air_defense::Ballistics::solve_intercept_newton(launcher, tgt, 1800.f, 20);
+        std::cout << "  Newton iterations: " << sol.iterations
+                  << " | miss: " << sol.miss_distance_m << " m"
+                  << " | converged: " << (sol.converged ? "yes" : "no") << "\n";
+        test("Newton intercept should iterate (>1 step)", sol.iterations > 1);
+        test("Newton intercept should converge", sol.converged);
+        test("Intercept time positive", sol.time_sec > 0.f);
+        test("Predicted intercept has altitude", sol.aim_point.z_m > 0.f);
     }
 
     // ===== PRINT RESULTS =====

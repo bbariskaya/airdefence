@@ -1,11 +1,11 @@
 #include "battery_controller.hpp"
+#include "game_config.hpp"
 #include "game_hud.hpp"
+#include "game_simulator.hpp"
 #include "interceptor.hpp"
 #include "threat_world.hpp"
 #include "radar/radar_engine.hpp"
 #include "raylib.h"
-#include <algorithm>
-#include <cmath>
 #include <deque>
 #include <string>
 #include <vector>
@@ -13,69 +13,21 @@
 namespace {
 constexpr int kW = 1280;
 constexpr int kH = 800;
-constexpr float kMaxRange = 200000.f;  // 200 km
 
 struct UIState {
     bool paused = false;
     bool game_over = false;
     float game_over_timer = 0.f;
-    float fire_cooldown = 0.f;  // Time between shots (seconds)
+    float fire_cooldown = 0.f;
 };
 
-/**
- * Check collision between interceptor and threat.
- * Returns true if they're within blast radius.
- */
-bool check_collision(const air_defense::Interceptor& missile,
-                    const air_defense::Threat& threat,
-                    float blast_radius) {
-    float dx = missile.x_m - threat.x_m;
-    float dy = missile.y_m - threat.y_m;
-    float dist = std::hypot(dx, dy);
-    return dist < blast_radius;
-}
-
-/**
- * Check if threat has reached the battery (within 2km).
- */
-bool threat_reached_battery(const air_defense::Threat& threat) {
-    float dist = std::hypot(threat.x_m, threat.y_m);
-    return dist < 2000.f;
-}
-
-/**
- * Get track position for mouse click target selection.
- */
-std::int32_t get_track_at_position(const radar::RadarEngine& engine,
-                                    const air_defense::ThreatWorld& world,
-                                    float mouse_x, float mouse_y) {
-    constexpr float kPpiR = 175.f;
-    constexpr int px = 640, py = 60, pw = 380, ph = 380;
-    const float cx = px + pw * 0.5f;
-    const float cy = py + ph * 0.5f;
-
-    // Check if click is in PPI area
-    if (mouse_x < px || mouse_x > px + pw || mouse_y < py || mouse_y > py + ph) {
-        return -1;
-    }
-
-    // Check tracks
-    for (const auto& t : engine.tracks()) {
-        if (t.confidence < 0.2f) continue;
-
-        float r = (t.range_m / kMaxRange) * kPpiR;
-        float rad = (t.azimuth_deg - 90.f) * 3.14159265f / 180.f;
-        float track_px = cx + r * std::cos(rad);
-        float track_py = cy + r * std::sin(rad);
-
-        float dx = mouse_x - track_px;
-        float dy = mouse_y - track_py;
-        if (std::hypot(dx, dy) < 15.f) {
-            return t.id;
-        }
-    }
-
-    return -1;
+radar::RadarEngine::Config make_radar_config() {
+    radar::RadarEngine::Config cfg;
+    cfg.max_range_m = air_defense::GameConfig::kMaxRadarRangeM;
+    cfg.sweep_deg_per_sec = 90.f;
+    cfg.omnidirectional_search = true;
+    cfg.detection_threshold = 0.12f;
+    return cfg;
 }
 
 } // namespace
@@ -85,11 +37,8 @@ int main() {
     InitWindow(kW, kH, "Iron Dome Battery - Air Defense Game");
     SetTargetFPS(60);
 
-    // Initialize game systems
     air_defense::ThreatWorld threat_world;
-    radar::RadarEngine::Config cfg;
-    cfg.max_range_m = kMaxRange;
-    cfg.sweep_deg_per_sec = 60.f;
+    radar::RadarEngine::Config cfg = make_radar_config();
     radar::RadarEngine engine(cfg);
     engine.set_sensor(&threat_world);
 
@@ -101,116 +50,49 @@ int main() {
     std::vector<float> blip_ages;
 
     while (!WindowShouldClose()) {
-        // Input handling
         if (IsKeyPressed(KEY_ESCAPE)) break;
         if (IsKeyPressed(KEY_R)) {
-            // Reset game
             threat_world = air_defense::ThreatWorld();
             engine = radar::RadarEngine(cfg);
             engine.set_sensor(&threat_world);
             interceptor_mgr = air_defense::InterceptorManager();
             battery.reset();
-            ui_state.paused = false;
-            ui_state.game_over = false;
-            ui_state.game_over_timer = 0.f;
+            ui_state = {};
             blip_ages.clear();
         }
         if (IsKeyPressed(KEY_P)) {
             ui_state.paused = !ui_state.paused;
         }
 
-        // Game update
-        float dt = GetFrameTime();
+        float dt = GetFrameTime() * air_defense::GameConfig::kSimTimeScale;
         if (!ui_state.paused && !ui_state.game_over) {
-            // Update world
-            threat_world.tick(dt);
-            engine.tick(dt);
-            interceptor_mgr.tick(dt, threat_world);
-            battery.tick(dt);
-            
-            // Update fire cooldown
-            if (ui_state.fire_cooldown > 0.f) {
-                ui_state.fire_cooldown -= dt;
+            auto step = air_defense::step_simulation(dt, threat_world, engine, interceptor_mgr,
+                                                     battery, ui_state.fire_cooldown, true);
+            if (step.game_over) {
+                ui_state.game_over = true;
+                ui_state.game_over_timer = 0.f;
             }
 
-            // Collect blip ages
             blip_ages.clear();
             for (const auto& d : engine.last_detections()) {
+                (void)d;
                 blip_ages.push_back(0.f);
             }
             for (auto& age : blip_ages) {
                 age += dt;
             }
-
-            // AUTO-TARGETING: Find nearest high-confidence track
-            float best_range = 1e9f;
-            std::int32_t best_track_id = -1;
-            for (const auto& t : engine.tracks()) {
-                if (t.confidence > 0.3f && t.range_m < best_range) {
-                    best_range = t.range_m;
-                    best_track_id = t.id;
-                }
-            }
-            
-            // Set target and auto-fire if we have a target and cooldown is up
-            if (best_track_id >= 0 && ui_state.fire_cooldown <= 0.f) {
-                battery.handle_target_selection(best_track_id);
-                if (battery.can_fire()) {
-                    air_defense::Threat* target = threat_world.threat_by_id(best_track_id);
-                    if (target) {
-                        interceptor_mgr.fire_interceptor(0.f, 0.f,
-                                                         target->x_m, target->y_m,
-                                                         target->vx_mps, target->vy_mps,
-                                                         best_track_id);
-                        ui_state.fire_cooldown = 0.10f;  // 100ms between shots
-                    }
-                }
-            }
-
-            // Check collisions: interceptors vs threats
-            for (auto& missile : interceptor_mgr.interceptors()) {
-                if (missile.destroyed) continue;
-
-                for (auto& threat : threat_world.threats_mut()) {
-                    if (threat.destroyed) continue;
-
-                    if (check_collision(missile, threat, interceptor_mgr.blast_radius_m)) {
-                        missile.destroyed = true;
-                        threat.destroyed = true;
-                        threat.explosion_timer = 0.f;  // Start explosion effect
-                        battery.total_intercepted++;
-                        break;
-                    }
-                }
-            }
-
-            // Check if threats reached battery
-            for (auto& threat : threat_world.threats_mut()) {
-                if (!threat.destroyed && threat_reached_battery(threat)) {
-                    threat.destroyed = true;
-                    battery.take_damage(battery.damage_per_hit);
-                    battery.total_threats_reached++;
-
-                    if (battery.battery_health() <= 0.f) {
-                        ui_state.game_over = true;
-                        ui_state.game_over_timer = 0.f;
-                    }
-                }
-            }
         } else if (ui_state.game_over) {
             ui_state.game_over_timer += dt;
         }
 
-        // Rendering
         BeginDrawing();
         ClearBackground({4, 8, 6, 255});
 
-        DrawText("Iron Dome Battery Simulation | Radar + Physics Engine", 16, 16, 18, {80, 200, 120, 255});
+        DrawText("Iron Dome | 3D Ballistic Intercept | 5x sim | fire 0.15s | spawn every 3s max 20",
+                 16, 16, 18, {80, 200, 120, 255});
 
-        // Draw game UI
         hud.render(engine, threat_world, interceptor_mgr, battery, blip_ages);
 
-        // Draw game over screen
         if (ui_state.game_over) {
             DrawRectangle(0, 0, kW, kH, {0, 0, 0, 200});
             DrawText("BATTERY DESTROYED", kW / 2 - 180, kH / 2 - 40, 48, {255, 80, 80, 255});

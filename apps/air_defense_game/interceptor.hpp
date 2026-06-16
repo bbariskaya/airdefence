@@ -1,72 +1,70 @@
 #pragma once
 
+#include "ballistics.hpp"
 #include <cmath>
 #include <cstdint>
 #include <vector>
 
 namespace air_defense {
 class ThreatWorld;
-class ThreatWorld;
 
-/**
- * Represents an active interceptor missile in flight.
- */
 struct Interceptor {
     std::int32_t id;
     float x_m;
     float y_m;
+    float z_m = 0.f;
     float vx_mps;
     float vy_mps;
+    float vz_mps = 0.f;
     float lifetime_sec;
     float max_lifetime_sec;
     bool destroyed;
-    float trail_x_m = 0.f;  // Previous position for trail visualization
+    float trail_x_m = 0.f;
     float trail_y_m = 0.f;
-    std::int32_t target_id;  // Which threat is this interceptor aimed at (-1 if no target)
+    float trail_z_m = 0.f;
+    std::int32_t target_id = -1;
 
     bool is_alive() const { return !destroyed && lifetime_sec < max_lifetime_sec; }
+    float speed_mps() const {
+        return std::sqrt(vx_mps * vx_mps + vy_mps * vy_mps + vz_mps * vz_mps);
+    }
 };
 
-/**
- * Manages interceptor missile physics and collisions.
- */
 class InterceptorManager {
 public:
     InterceptorManager();
 
     void tick(float dt_sec);
     void tick(float dt_sec, const ThreatWorld& world);
-    void fire_interceptor(float from_x, float from_y, float target_x, float target_y, float target_vx, float target_vy);
-    void fire_interceptor(float from_x, float from_y, float target_x, float target_y, float target_vx, float target_vy, std::int32_t target_id);
+    void fire_interceptor(float from_x, float from_y, float target_x, float target_y,
+                          float target_vx, float target_vy);
+    void fire_interceptor(float from_x, float from_y, float target_x, float target_y,
+                          float target_vx, float target_vy, std::int32_t target_id);
+    void fire_interceptor(float from_x, float from_y, float from_z,
+                          float target_x, float target_y, float target_z,
+                          float target_vx, float target_vy, float target_vz,
+                          std::int32_t target_id);
 
     const std::vector<Interceptor>& interceptors() const { return interceptors_; }
     std::vector<Interceptor>& interceptors() { return interceptors_; }
-
     void destroy_interceptor(std::int32_t id);
 
-    // Configuration
-    float missile_speed_mps = 1200.f;  // Faster missiles
-    float blast_radius_m = 500.f;    // Larger blast radius
+    static bool calculate_intercept_point(float mx, float my, float tx, float ty,
+                                          float tvx, float tvy, float missile_speed,
+                                          float& intercept_x, float& intercept_y,
+                                          float& time_sec);
+
+    float missile_speed_mps = 1800.f;
+    float blast_radius_m = 600.f;
     float max_missile_lifetime_sec = 120.f;
 
-    // Statistics
     std::int32_t total_fired = 0;
     std::int32_t total_intercepted = 0;
 
 private:
     std::vector<Interceptor> interceptors_;
     std::int32_t next_interceptor_id_ = 2000;
-
     void update_interceptor_positions(float dt_sec);
-
-    /**
-     * Calculate intercept point for constant-velocity target.
-     * Returns (px, py, time_to_intercept) where missile should aim.
-     */
-    static constexpr int kMaxIterations = 10;
-    bool calculate_intercept_point(float mx, float my, float tx, float ty,
-                                    float tvx, float tvy, float missile_speed,
-                                    float& intercept_x, float& intercept_y, float& time_sec);
 };
 
 } // namespace air_defense

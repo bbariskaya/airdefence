@@ -1,4 +1,6 @@
 #include "battery_controller.hpp"
+#include "game_config.hpp"
+#include "game_simulator.hpp"
 #include "interceptor.hpp"
 #include "threat_world.hpp"
 #include "radar/radar_engine.hpp"
@@ -35,9 +37,11 @@ int main() {
     print_header("Radar Detection Integration");
     {
         air_defense::ThreatWorld threat_world;
+        threat_world.spawn_interval_sec = 1.f;
         radar::RadarEngine::Config cfg;
-        cfg.max_range_m = 200000.f;  // 200 km (realistic)
-        cfg.beam_width_deg = 30.f;  // Wide beam
+        cfg.max_range_m = air_defense::GameConfig::kMaxRadarRangeM;
+        cfg.omnidirectional_search = true;
+        cfg.beam_width_deg = 30.f;
         radar::RadarEngine engine(cfg);
         engine.set_sensor(&threat_world);
 
@@ -75,13 +79,14 @@ int main() {
     print_header("Track ID Matching");
     {
         air_defense::ThreatWorld threat_world;
+        threat_world.spawn_interval_sec = 1.f;
         radar::RadarEngine::Config cfg;
-        cfg.max_range_m = 500000.f;
+        cfg.max_range_m = air_defense::GameConfig::kMaxRadarRangeM;
+        cfg.omnidirectional_search = true;
         cfg.beam_width_deg = 30.f;
         radar::RadarEngine engine(cfg);
         engine.set_sensor(&threat_world);
 
-        // Simulate until we have a track
         bool found_match = false;
         for (int frame = 0; frame < 1000 && !found_match; frame++) {
             threat_world.tick(0.016f);
@@ -136,29 +141,31 @@ int main() {
         t.id = 1000;
         t.x_m = 1000.f;
         t.y_m = 0.f;
-        t.vx_mps = -100.f;
+        t.z_m = 5000.f;
+        t.vx_mps = -400.f;
         t.vy_mps = 0.f;
+        t.vz_mps = -50.f;
         t.rcs_m2 = 1.0f;
         t.destroyed = false;
         t.explosion_timer = 0.f;
         threats.push_back(t);
 
         // Fire missile at it
-        mgr.fire_interceptor(0.f, 0.f, t.x_m, t.y_m, t.vx_mps, t.vy_mps);
+        mgr.fire_interceptor(0.f, 0.f, t.x_m, t.y_m, t.vx_mps, t.vy_mps, t.id);
         test("Missile should be created", mgr.interceptors().size() == 1);
 
-        // Simulate collision
         bool hit = false;
         for (int frame = 0; frame < 5000; frame++) {
             threat_world.tick(0.016f);
-            mgr.tick(0.016f);
+            mgr.tick(0.016f, threat_world);
 
             auto& missile = mgr.interceptors()[0];
             auto& threat = threats[0];
             
             float dx = missile.x_m - threat.x_m;
             float dy = missile.y_m - threat.y_m;
-            float dist = std::hypot(dx, dy);
+            float dz = missile.z_m - threat.z_m;
+            float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
             
             if (dist < mgr.blast_radius_m && !missile.destroyed && !threat.destroyed) {
                 missile.destroyed = true;
@@ -188,17 +195,17 @@ int main() {
         t.destroyed = false;
         t.explosion_timer = 0.f;
         threats.push_back(t);
+        air_defense::Threat& live = threats.back();
 
         int health_before = battery.battery_health();
         
-        // Simulate threat reaching battery
         bool reached = false;
         for (int frame = 0; frame < 10000; frame++) {
             threat_world.tick(0.016f);
             
-            float range = std::hypot(t.x_m, t.y_m);
-            if (range < 2000.f && !t.destroyed) {
-                t.destroyed = true;
+            float range = std::hypot(live.x_m, live.y_m);
+            if (range < 2000.f && !live.destroyed) {
+                live.destroyed = true;
                 battery.take_damage(battery.damage_per_hit);
                 reached = true;
                 std::cout << "  Threat reached at frame " << frame << " | Range: " << range << " m\n";

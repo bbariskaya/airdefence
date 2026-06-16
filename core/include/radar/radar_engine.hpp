@@ -20,12 +20,15 @@ public:
         float sweep_deg_per_sec;
         float detection_threshold;
         float range_resolution_m;
+        /** When true, every target in range is detected each frame (search radar). */
+        bool omnidirectional_search;
         Config()
-            : max_range_m(120000.f),
-              beam_width_deg(30.f),  // Wider beam for better coverage
-              sweep_deg_per_sec(48.f),
-              detection_threshold(0.18f),
-              range_resolution_m(500.f) {}
+            : max_range_m(500000.f),
+              beam_width_deg(30.f),
+              sweep_deg_per_sec(90.f),
+              detection_threshold(0.12f),
+              range_resolution_m(500.f),
+              omnidirectional_search(true) {}
     };
 
     RadarEngine();

@@ -42,6 +42,7 @@ private:
     void draw_status_panel(const radar::RadarEngine& engine,
                            const BatteryController& battery,
                            const ThreatWorld& world);
+    void draw_ballistic_profile(const ThreatWorld& world, const InterceptorManager& missiles);
 
     // Helper rendering functions
     static void draw_threat_triangle(float px, float py, float heading_deg);

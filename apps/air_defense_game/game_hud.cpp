@@ -1,4 +1,5 @@
 #include "game_hud.hpp"
+#include "game_config.hpp"
 #include "raylib.h"
 #include <cmath>
 #include <string>
@@ -7,7 +8,8 @@
 namespace air_defense {
 
 namespace {
-constexpr float kMaxRange = 120000.f;
+constexpr float kMaxRange = GameConfig::kMaxRadarRangeM;
+constexpr float kExplosionDuration = GameConfig::kExplosionDurationSec;
 constexpr float kPpiR = 175.f;
 
 static Color phosphor() { return {80, 255, 120, 255}; }
@@ -28,52 +30,70 @@ static Vector2 polar_px(float cx, float cy, float range_m, float az_deg) {
     return {cx + r * std::cos(rad), cy + r * std::sin(rad)};
 }
 
-static void draw_triangle(float px, float py, float heading_deg, Color fill) {
+static void draw_rocket(float px, float py, float heading_deg, float scale, Color body, bool exhaust) {
     float rad = (heading_deg - 90.f) * 3.14159265f / 180.f;
-    Vector2 nose = {px + std::cos(rad) * 8.f, py + std::sin(rad) * 8.f};
-    Vector2 left = {px + std::cos(rad + 2.4f) * 5.f, py + std::sin(rad + 2.4f) * 5.f};
-    Vector2 right = {px + std::cos(rad - 2.4f) * 5.f, py + std::sin(rad - 2.4f) * 5.f};
-    DrawTriangle(nose, left, right, fill);
+    float c = std::cos(rad);
+    float s = std::sin(rad);
+    auto rot = [&](float lx, float ly) -> Vector2 {
+        return {px + lx * c - ly * s, py + lx * s + ly * c};
+    };
+
+    Vector2 nose = rot(14.f * scale, 0.f);
+    Vector2 tail = rot(-12.f * scale, 0.f);
+    Vector2 top = rot(0.f, -3.5f * scale);
+    Vector2 bot = rot(0.f, 3.5f * scale);
+    DrawTriangle(nose, top, bot, body);
+
+    Vector2 f1 = rot(-10.f * scale, -5.f * scale);
+    Vector2 f2 = rot(-10.f * scale, 5.f * scale);
+    Vector2 f3 = rot(-14.f * scale, 0.f);
+    DrawTriangle(f1, f2, f3, {body.r, body.g, body.b, 200});
+
+    DrawLineEx(top, bot, 2.f * scale, {30, 30, 30, 220});
+    DrawCircleV(rot(2.f * scale, 0.f), 2.f * scale, {180, 180, 190, 255});
+
+    if (exhaust) {
+        Vector2 e1 = rot(-16.f * scale, -4.f * scale);
+        Vector2 e2 = rot(-16.f * scale, 4.f * scale);
+        Vector2 e3 = rot(-24.f * scale, 0.f);
+        DrawTriangle(e1, e2, e3, {255, 180, 60, 200});
+        DrawTriangle(e1, e2, rot(-20.f * scale, 0.f), {255, 240, 120, 140});
+    }
+    (void)tail;
 }
 
-static void draw_missile_symbol(float px, float py, float heading_deg) {
-    float rad = (heading_deg - 90.f) * 3.14159265f / 180.f;
-    Vector2 tip = {px + std::cos(rad) * 9.f, py + std::sin(rad) * 9.f};
-    Vector2 left = {px + std::cos(rad + 2.6f) * 4.5f, py + std::sin(rad + 2.6f) * 4.5f};
-    Vector2 right = {px + std::cos(rad - 2.6f) * 4.5f, py + std::sin(rad - 2.6f) * 4.5f};
-    DrawTriangle(tip, left, right, {180, 235, 255, 255});
-    DrawCircle(static_cast<int>(px), static_cast<int>(py), 2.5f, {140, 220, 255, 255});
-}
-
-static void draw_missile_trail(float x0, float y0, float x1, float y1) {
-    Vector2 start = {x0, y0};
-    Vector2 end = {x1, y1};
-    DrawLineEx(start, end, 4.f, {90, 170, 255, 120});
-    DrawLineEx(start, end, 2.f, {155, 220, 255, 180});
+static void draw_exhaust_trail(float x0, float y0, float x1, float y1) {
+    DrawLineEx({x0, y0}, {x1, y1}, 5.f, {255, 140, 40, 80});
+    DrawLineEx({x0, y0}, {x1, y1}, 2.f, {255, 220, 100, 160});
 }
 
 static void draw_explosion_effect(float px, float py, float progress) {
     unsigned char alpha = static_cast<unsigned char>(255 * (1.f - progress));
-    float scale = 1.f + progress * 2.5f;
-    DrawCircleV({px, py}, 8.f * scale, {255, 220, 140, static_cast<unsigned char>(alpha * 0.7f)});
-    DrawCircleV({px, py}, 5.f * scale, {255, 120, 0, alpha});
+    float scale = 1.f + progress * 3.5f;
 
-    for (int i = 0; i < 6; ++i) {
-        float ang = i * (2.f * 3.14159265f / 6.f);
-        float start_r = 10.f * scale;
-        float end_r = start_r + 14.f * (1.f - progress);
+    // Outer shockwave ring
+    DrawCircleLines(static_cast<int>(px), static_cast<int>(py),
+                    static_cast<int>(18.f * scale), {255, 200, 100, alpha});
+    DrawCircleV({px, py}, 14.f * scale, {255, 220, 140, static_cast<unsigned char>(alpha * 0.5f)});
+    DrawCircleV({px, py}, 8.f * scale, {255, 120, 0, alpha});
+    DrawCircleV({px, py}, 3.f * scale, {255, 255, 220, alpha});
+
+    for (int i = 0; i < 12; ++i) {
+        float ang = i * (2.f * 3.14159265f / 12.f) + progress * 0.8f;
+        float start_r = 12.f * scale;
+        float end_r = start_r + 22.f * (1.f - progress);
         Vector2 start = {px + std::cos(ang) * start_r, py + std::sin(ang) * start_r};
         Vector2 end = {px + std::cos(ang) * end_r, py + std::sin(ang) * end_r};
-        DrawLineEx(start, end, 3.f, {255, 180, 90, alpha});
+        DrawLineEx(start, end, 2.5f, {255, 180, 60, alpha});
     }
 
-    for (int i = 0; i < 3; ++i) {
-        float ang = i * (2.f * 3.14159265f / 3.f) + progress * 0.5f;
-        float r = 12.f * scale + i * 4.f;
+    for (int i = 0; i < 5; ++i) {
+        float ang = i * (2.f * 3.14159265f / 5.f) + progress;
+        float r = 16.f * scale + i * 5.f;
         DrawCircle(static_cast<int>(px + std::cos(ang) * r),
                    static_cast<int>(py + std::sin(ang) * r),
-                   static_cast<int>(4 + progress * 4.f),
-                   {200, 140, 90, static_cast<unsigned char>(alpha * 0.5f)});
+                   static_cast<int>(5 + progress * 6.f),
+                   {255, 90, 40, static_cast<unsigned char>(alpha * 0.6f)});
     }
 }
 } // namespace
@@ -97,12 +117,13 @@ void GameHUD::render(const radar::RadarEngine& engine,
         current_blips_.end());
 
     draw_tactical_map(world, engine.sweep_azimuth_deg(), missiles);
+    draw_ballistic_profile(world, missiles);
     draw_ppi(engine, current_blips_, missiles, world);
     draw_status_panel(engine, battery, world);
 }
 
 void GameHUD::draw_tactical_map(const ThreatWorld& world, float radar_az, const InterceptorManager& missiles) {
-    const int mx = 20, my = 60, mw = 600, mh = 600;
+    const int mx = 20, my = 60, mw = 600, mh = 420;
     DrawRectangle(mx, my, mw, mh, {8, 14, 10, 255});
     DrawRectangleLines(mx, my, mw, mh, dim());
 
@@ -115,9 +136,10 @@ void GameHUD::draw_tactical_map(const ThreatWorld& world, float radar_az, const 
         DrawLine(static_cast<int>(cx + i * 55), my, static_cast<int>(cx + i * 55), my + mh, {14, 32, 22, 255});
     }
 
-    // Battery at origin
-    DrawCircle(static_cast<int>(cx), static_cast<int>(cy), 8, {0, 255, 0, 255});
-    DrawText("BATTERY", static_cast<int>(cx) + 12, static_cast<int>(cy) - 8, 12, {0, 255, 0, 255});
+    // Battery launcher
+    DrawRectangle(static_cast<int>(cx) - 10, static_cast<int>(cy) - 6, 20, 12, {60, 80, 60, 255});
+    DrawCircle(static_cast<int>(cx), static_cast<int>(cy), 6, {0, 255, 0, 255});
+    DrawText("BATTERY", static_cast<int>(cx) + 14, static_cast<int>(cy) - 8, 12, {0, 255, 0, 255});
 
     // Radar sweep line
     float sweep_rad = (radar_az - 90.f) * 3.14159265f / 180.f;
@@ -125,38 +147,128 @@ void GameHUD::draw_tactical_map(const ThreatWorld& world, float radar_az, const 
                {cx + std::cos(sweep_rad) * 280.f, cy + std::sin(sweep_rad) * 280.f},
                2.f, {80, 255, 120, 80});
 
-    // Draw missiles on tactical map
-    constexpr float kMapScale = 0.0042f;
+    // Draw missiles on tactical map (in-air interceptors with smoke trail)
+    constexpr float kMapScale = 0.0011f;
     for (const auto& missile : missiles.interceptors()) {
+        if (!missile.is_alive()) continue;
         float px = cx + missile.x_m * kMapScale;
         float py = cy - missile.y_m * kMapScale;
         float trail_x = cx + missile.trail_x_m * kMapScale;
         float trail_y = cy - missile.trail_y_m * kMapScale;
-        draw_missile_trail(trail_x, trail_y, px, py);
+        draw_exhaust_trail(trail_x, trail_y, px, py);
         float heading = norm_deg(std::atan2(missile.vx_mps, missile.vy_mps) * 57.2958f);
-        draw_missile_symbol(px, py, heading);
+        draw_rocket(px, py, heading, 0.9f, {180, 220, 255, 255}, true);
+        DrawText(TextFormat("INT %d %.0fm/s", missile.id, missile.speed_mps()),
+                 static_cast<int>(px) + 10, static_cast<int>(py) - 18, 9, {140, 220, 255, 220});
     }
 
-    // Draw threats
+    // Draw threats (inbound missiles on road to battery)
     for (const auto& threat : world.threats()) {
+        if (threat.destroyed) continue;
         float px = cx + threat.x_m * kMapScale;
         float py = cy - threat.y_m * kMapScale;
         float hdg = norm_deg(std::atan2(threat.vx_mps, threat.vy_mps) * 57.2958f);
-        draw_triangle(px, py, hdg, threat_color());
-        DrawText(threat.callsign.c_str(), static_cast<int>(px) + 10, static_cast<int>(py) - 8, 10, threat_color());
+        draw_rocket(px, py, hdg, 1.f, {220, 70, 60, 255}, true);
+        DrawText(TextFormat("%s %.0fkm %.0fm", threat.callsign.c_str(),
+                            std::hypot(threat.x_m, threat.y_m) / 1000.f, threat.z_m),
+                 static_cast<int>(px) + 12, static_cast<int>(py) - 10, 9, threat_color());
+        DrawText(TextFormat("%.0f m/s", threat.speed_mps()),
+                 static_cast<int>(px) + 12, static_cast<int>(py) + 2, 9, {255, 160, 120, 255});
     }
 
-    // Draw destroyed threats (explosion effects with flash)
+    // Draw destroyed threats (explosion effects)
     for (const auto& threat : world.threats()) {
-        if (threat.destroyed && threat.explosion_timer < 0.5f) {
+        if (threat.destroyed && threat.explosion_timer < kExplosionDuration) {
             float px = cx + threat.x_m * kMapScale;
             float py = cy - threat.y_m * kMapScale;
-            float progress = threat.explosion_timer / 0.5f;
+            float progress = threat.explosion_timer / kExplosionDuration;
             draw_explosion_effect(px, py, progress);
+            DrawText("KILL", static_cast<int>(px) - 12, static_cast<int>(py) - 24, 12, {255, 200, 80, 255});
         }
     }
 
-    DrawText("TACTICAL MAP", mx + 8, my + 8, 16, phosphor());
+    DrawText("TOP-DOWN RADAR MAP", mx + 8, my + 8, 16, phosphor());
+}
+
+void GameHUD::draw_ballistic_profile(const ThreatWorld& world, const InterceptorManager& missiles) {
+    const int bx = 20, by = 490, bw = 600, bh = 280;
+    DrawRectangle(bx, by, bw, bh, {12, 18, 28, 255});
+    DrawRectangleLines(bx, by, bw, bh, dim());
+
+    const float ground_y = by + bh - 36.f;
+    const float left_x = bx + 48.f;
+    const float plot_w = bw - 64.f;
+    const float plot_h = bh - 56.f;
+    constexpr float kMaxGroundKm = 200.f;
+    constexpr float kMaxAltKm = 40.f;
+
+    // Sky gradient
+    for (int i = 0; i < 8; ++i) {
+        unsigned char b = static_cast<unsigned char>(40 + i * 8);
+        DrawRectangle(bx + 1, by + 1 + i * static_cast<int>(plot_h / 8.f),
+                      bw - 2, static_cast<int>(plot_h / 8.f) + 1,
+                      {10, 20, b, 255});
+    }
+
+    // Ground
+    DrawRectangle(bx, static_cast<int>(ground_y), bw, bh - static_cast<int>(ground_y - by),
+                  {45, 38, 28, 255});
+    DrawLineEx({static_cast<float>(bx), ground_y}, {static_cast<float>(bx + bw), ground_y}, 2.f,
+               {90, 75, 50, 255});
+    DrawText("GROUND", bx + 8, static_cast<int>(ground_y) + 4, 11, {140, 120, 90, 255});
+
+    auto to_screen = [&](float ground_m, float alt_m) -> Vector2 {
+        float gx = std::clamp(ground_m / (kMaxGroundKm * 1000.f), 0.f, 1.f);
+        float az = std::clamp(alt_m / (kMaxAltKm * 1000.f), 0.f, 1.f);
+        return {left_x + gx * plot_w, ground_y - az * plot_h};
+    };
+
+    for (int km = 50; km <= 200; km += 50) {
+        Vector2 p = to_screen(km * 1000.f, 0.f);
+        DrawLine(static_cast<int>(p.x), static_cast<int>(by + 24), static_cast<int>(p.x),
+                 static_cast<int>(ground_y), {30, 45, 60, 120});
+        DrawText(TextFormat("%dkm", km), static_cast<int>(p.x) - 12, static_cast<int>(ground_y) + 16, 10, dim());
+    }
+    for (int km = 10; km <= 40; km += 10) {
+        Vector2 p = to_screen(0.f, km * 1000.f);
+        DrawText(TextFormat("%dkm", km), bx + 6, static_cast<int>(p.y) - 6, 9, dim());
+        DrawLine(static_cast<int>(left_x), static_cast<int>(p.y), bx + bw - 8, static_cast<int>(p.y),
+                 {30, 45, 60, 80});
+    }
+
+    // Battery on ground
+    DrawRectangle(static_cast<int>(left_x) - 6, static_cast<int>(ground_y) - 14, 12, 14, {0, 180, 0, 255});
+
+    for (const auto& threat : world.threats()) {
+        if (threat.destroyed) continue;
+        float ground = std::hypot(threat.x_m, threat.y_m);
+        Vector2 p = to_screen(ground, threat.z_m);
+        float hdg = norm_deg(std::atan2(threat.vx_mps, -threat.vz_mps) * 57.2958f);
+        draw_rocket(p.x, p.y, hdg, 1.1f, {230, 80, 70, 255}, true);
+        DrawText(TextFormat("%.0f m/s", threat.speed_mps()), static_cast<int>(p.x) + 8,
+                 static_cast<int>(p.y) - 14, 9, {255, 180, 120, 255});
+    }
+
+    for (const auto& m : missiles.interceptors()) {
+        if (!m.is_alive()) continue;
+        float ground = std::hypot(m.x_m, m.y_m);
+        Vector2 p = to_screen(ground, m.z_m);
+        float hdg = norm_deg(std::atan2(m.vx_mps, -m.vz_mps) * 57.2958f);
+        Vector2 pt = to_screen(std::hypot(m.trail_x_m, m.trail_y_m), m.trail_z_m);
+        draw_exhaust_trail(pt.x, pt.y, p.x, p.y);
+        draw_rocket(p.x, p.y, hdg, 0.95f, {120, 200, 255, 255}, true);
+    }
+
+    for (const auto& threat : world.threats()) {
+        if (threat.destroyed && threat.explosion_timer < kExplosionDuration) {
+            float ground = std::hypot(threat.x_m, threat.y_m);
+            Vector2 p = to_screen(ground, threat.z_m);
+            draw_explosion_effect(p.x, p.y, threat.explosion_timer / kExplosionDuration);
+        }
+    }
+
+    DrawText("BALLISTIC PROFILE (altitude vs ground range)", bx + 8, by + 8, 15, phosphor());
+    DrawText("Threats dive from 12-35 km | Intercept uses secant TOF + gravity", bx + 8, by + bh - 18, 10, dim());
 }
 
 void GameHUD::draw_ppi(const radar::RadarEngine& engine,
@@ -170,11 +282,11 @@ void GameHUD::draw_ppi(const radar::RadarEngine& engine,
     DrawRectangle(px, py, pw, ph, {5, 10, 7, 255});
     DrawRectangleLines(px, py, pw, ph, dim());
 
-    // Range rings
-    for (int ring = 1; ring <= 4; ++ring) {
-        float rr = kPpiR * ring / 4.f;
+    // Range rings (100 km steps up to 500 km)
+    for (int ring = 1; ring <= 5; ++ring) {
+        float rr = kPpiR * ring / 5.f;
         DrawCircleLines(static_cast<int>(cx), static_cast<int>(cy), rr, dim());
-        DrawText(TextFormat("%.0f km", 30.f * ring), static_cast<int>(cx) + 4,
+        DrawText(TextFormat("%.0f km", 100.f * ring), static_cast<int>(cx) + 4,
                  static_cast<int>(cy - rr - 10), 11, dim());
     }
     DrawCircleLines(static_cast<int>(cx), static_cast<int>(cy), kPpiR, phosphor());
@@ -225,22 +337,21 @@ void GameHUD::draw_ppi(const radar::RadarEngine& engine,
             if (trail_dist < kMaxRange && trail_dist > 0.f) {
                 float trail_az = norm_deg(std::atan2(missile.trail_x_m, missile.trail_y_m) * 57.2958f);
                 Vector2 trail_p = polar_px(cx, cy, trail_dist, trail_az);
-                draw_missile_trail(trail_p.x, trail_p.y, p.x, p.y);
+                draw_exhaust_trail(trail_p.x, trail_p.y, p.x, p.y);
             }
-
             float heading = norm_deg(std::atan2(missile.vx_mps, missile.vy_mps) * 57.2958f);
-            draw_missile_symbol(p.x, p.y, heading);
+            draw_rocket(p.x, p.y, heading, 0.7f, {160, 220, 255, 255}, true);
         }
     }
 
-    // Draw explosion effects on PPI with flash
+    // Draw explosion effects on PPI
     for (const auto& threat : world.threats()) {
-        if (threat.destroyed && threat.explosion_timer < 0.5f) {
+        if (threat.destroyed && threat.explosion_timer < kExplosionDuration) {
             float dist = std::hypot(threat.x_m, threat.y_m);
             if (dist < kMaxRange) {
                 float az = norm_deg(std::atan2(threat.x_m, threat.y_m) * 57.2958f);
                 Vector2 p = polar_px(cx, cy, dist, az);
-                float progress = threat.explosion_timer / 0.5f;
+                float progress = threat.explosion_timer / kExplosionDuration;
                 draw_explosion_effect(p.x, p.y, progress);
             }
         }
@@ -287,8 +398,22 @@ void GameHUD::draw_status_panel(const radar::RadarEngine& engine,
     // Threat info
     DrawText("THREATS", x + 10, ty, 14, threat_color());
     ty += 16;
-    DrawText(TextFormat("%zu active", world.threats().size()), x + 10, ty, 12, dim());
+    DrawText(TextFormat("%d active (max %d)", world.active_threat_count(), world.max_active_threats),
+             x + 10, ty, 12, dim());
     ty += 20;
+
+    DrawText("BALLISTIC DATA", x + 10, ty, 14, {255, 180, 100, 255});
+    ty += 16;
+    for (const auto& th : world.threats()) {
+        if (th.destroyed) continue;
+        DrawText(th.callsign.c_str(), x + 10, ty, 10, threat_color());
+        ty += 12;
+        DrawText(TextFormat("Alt %.1f km  Spd %.0f m/s", th.z_m / 1000.f, th.speed_mps()),
+                 x + 10, ty, 9, dim());
+        ty += 14;
+        if (ty > y + h - 120) break;
+    }
+    ty += 6;
 
     // Tracks
     DrawText("TRACKS", x + 10, ty, 14, phosphor());
@@ -303,16 +428,14 @@ void GameHUD::draw_status_panel(const radar::RadarEngine& engine,
         }
     }
 
-    ty = y + h - 120;
-    DrawText("CONTROLS", x + 10, ty, 14, phosphor());
+    ty = y + h - 100;
+    DrawText("AUTO MODE", x + 10, ty, 14, phosphor());
     ty += 18;
-    DrawText("CLICK threat to target", x + 10, ty, 10, dim());
+    DrawText("Radar picks closest", x + 10, ty, 10, dim());
     ty += 14;
-    DrawText("SPACE to fire", x + 10, ty, 10, dim());
+    DrawText("unengaged track", x + 10, ty, 10, dim());
     ty += 14;
-    DrawText("R to reset", x + 10, ty, 10, dim());
-    ty += 14;
-    DrawText("ESC to quit", x + 10, ty, 10, dim());
+    DrawText("P pause | R reset", x + 10, ty, 10, dim());
 }
 
 } // namespace air_defense

@@ -1,0 +1,20 @@
+services:
+  # Build image and run all tests (works on any machine with Docker).
+  test:
+    build: .
+    command: test
+
+  # Headless air-defense simulation (stdout events, no window).
+  debug:
+    build: .
+    command: debug
+
+  # Raylib GUI — Linux only; requires X11 socket from host.
+  gui:
+    build: .
+    command: gui
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    network_mode: host

@@ -1,0 +1,8 @@
+build/
+.git/
+.cursor/
+*.md
+!README.md
+web/
+embed/
+*.bat

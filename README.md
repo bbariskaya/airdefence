@@ -110,7 +110,43 @@ Misses happen when targets jink, drag changes their path, or the missile cannot 
 
 Disable graphics: `cmake -DRADAR_BUILD_GRAPHICS=OFF ..`
 
-### Linux
+### Docker (same result on any PC with Docker)
+
+Docker is the most reliable way to **build, test, and run the headless sim** without installing CMake or Raylib on the host. The GUI can run in Docker on **Linux + X11**; on Windows/macOS use a native build or WSL2 with an X server for the window.
+
+```bash
+cd airdefence
+
+# Build image (runs unit + integration + system tests during build)
+docker build -t airdefence .
+
+# Run tests again
+docker run --rm airdefence test
+
+# Headless Iron Dome (console output)
+docker run --rm airdefence debug
+
+# GUI — Linux host only
+xhost +local:docker
+docker run --rm -e DISPLAY=$DISPLAY -v /tmp/.X11-unix:/tmp/.X11-unix airdefence gui
+```
+
+With Compose:
+
+```bash
+docker compose run --rm test    # all tests
+docker compose run --rm debug   # headless sim
+docker compose run --rm gui     # Raylib window (Linux + X11)
+```
+
+| Mode | Docker? | Notes |
+|------|---------|--------|
+| Tests | Yes | Fully portable |
+| `air_defense_debug` | Yes | No display needed |
+| `air_defense_game` GUI | Partial | Easy on Linux; WSL2/VcXsrv on Windows; XQuartz on macOS |
+| Best GUI for end users | Native build | Or ship binaries / Unreal client later |
+
+### Linux (native)
 
 ```bash
 cd airdefence
@@ -265,6 +301,44 @@ run-web.bat
 ```
 
 Or serve `web/` locally and open the PPI page in a browser.
+
+---
+
+## Dockerization
+
+Reproducible builds and tests on any machine with [Docker](https://docs.docker.com/get-docker/) installed — no local CMake or Raylib required.
+
+### Quick start
+
+```bash
+cd airdefence
+
+# Build image (53 tests run during build)
+./docker-run.sh build
+
+# Run all tests
+./docker-run.sh test
+
+# Headless Iron Dome sim (console)
+./docker-run.sh debug
+
+# GUI (Linux desktop + X11; run xhost +local:docker if needed)
+./docker-run.sh gui
+```
+
+Or use Compose profiles: `docker compose run --rm test`, `debug`, or `gui`.
+
+### What’s in the image
+
+| File | Purpose |
+|------|---------|
+| `Dockerfile` | Multi-stage Ubuntu 24.04 build with Raylib |
+| `docker-compose.yml` | `test`, `debug`, `gui` services |
+| `docker/entrypoint.sh` | Commands: `test`, `debug`, `gui`, `radar`, `console` |
+| `docker-run.sh` | Host helper (build, test, debug, gui) |
+| `docker-test.sh` | Build-if-needed + run tests |
+
+Tests and headless sim are fully portable. For the Raylib window, a native build (`./build/air_defense_game`) is usually smoother on Wayland; Docker GUI works best on Linux + X11 after `xhost +local:docker`.
 
 ---
 

@@ -182,20 +182,22 @@ int main() {
     print_header("Threat Reaching Battery");
     {
         air_defense::ThreatWorld threat_world;
+        threat_world.spawn_interval_sec = 9999.f;
         air_defense::BatteryController battery;
         
         auto& threats = threat_world.threats_mut();
         air_defense::Threat t;
         t.id = 1000;
-        t.x_m = 5000.f;  // 5 km away
+        t.x_m = 5000.f;
         t.y_m = 0.f;
-        t.vx_mps = -1000.f;  // Moving toward origin
+        t.z_m = 100.f;
+        t.vx_mps = -1000.f;
         t.vy_mps = 0.f;
+        t.vz_mps = 0.f;
         t.rcs_m2 = 1.0f;
         t.destroyed = false;
         t.explosion_timer = 0.f;
         threats.push_back(t);
-        air_defense::Threat& live = threats.back();
 
         int health_before = battery.battery_health();
         
@@ -203,9 +205,11 @@ int main() {
         for (int frame = 0; frame < 10000; frame++) {
             threat_world.tick(0.016f);
             
-            float range = std::hypot(live.x_m, live.y_m);
-            if (range < 2000.f && !live.destroyed) {
-                live.destroyed = true;
+            air_defense::Threat* live = threat_world.threat_by_id(1000);
+            if (!live || live->destroyed) continue;
+            float range = std::hypot(live->x_m, live->y_m);
+            if (range < 2000.f) {
+                live->destroyed = true;
                 battery.take_damage(battery.damage_per_hit);
                 reached = true;
                 std::cout << "  Threat reached at frame " << frame << " | Range: " << range << " m\n";

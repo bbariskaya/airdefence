@@ -268,7 +268,7 @@ void GameHUD::draw_ballistic_profile(const ThreatWorld& world, const Interceptor
     }
 
     DrawText("BALLISTIC PROFILE (altitude vs ground range)", bx + 8, by + 8, 15, phosphor());
-    DrawText("Threats dive from 12-35 km | Intercept uses secant TOF + gravity", bx + 8, by + bh - 18, 10, dim());
+    DrawText("Threats dive from 12-35 km | Newton-Raphson TOF + iterative midcourse", bx + 8, by + bh - 18, 10, dim());
 }
 
 void GameHUD::draw_ppi(const radar::RadarEngine& engine,

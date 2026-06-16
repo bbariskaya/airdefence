@@ -88,7 +88,7 @@ int main() {
         BeginDrawing();
         ClearBackground({4, 8, 6, 255});
 
-        DrawText("Iron Dome | 3D Ballistic Intercept | 5x sim | fire 0.15s | spawn every 3s max 20",
+        DrawText("Iron Dome | Newton-Raphson intercept + air drag | 5x sim",
                  16, 16, 18, {80, 200, 120, 255});
 
         hud.render(engine, threat_world, interceptor_mgr, battery, blip_ages);

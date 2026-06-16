@@ -57,6 +57,7 @@ public:
     float threat_altitude_min_m = 12000.f;
     float threat_altitude_max_m = 35000.f;
     float threat_terminal_maneuver_g = 2.5f;  // lateral g in terminal phase below 15 km
+    float threat_rcs_min_m2 = 0.5f;
     float threat_rcs_max_m2 = 2.0f;
 
 private:

@@ -17,7 +17,7 @@ namespace air_defense {
 struct Ballistics {
     static constexpr float kGravityMps2 = 9.81f;
     /** Thin-atmosphere drag scale (threats slow slightly in dense air below 15 km). */
-    static constexpr float kAirDensityScale = 1.2e-4f;
+    static constexpr float kAirDensityScale = 5e-6f;
 
     struct State3D {
         float x_m = 0.f;

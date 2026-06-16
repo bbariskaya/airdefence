@@ -120,6 +120,23 @@ void ThreatWorld::update_threat_positions(float dt_sec) {
     const float g = Ballistics::kGravityMps2;
     for (auto& threat : threats_) {
         if (threat.destroyed) continue;
+
+        if (threat.z_m < 15000.f && threat.z_m > 500.f) {
+            float phase = static_cast<float>(threat.id) * 0.17f + threat.explosion_timer;
+            float lateral = threat_terminal_maneuver_g * g * dt_sec;
+            threat.vx_mps += lateral * std::sin(phase * 3.1f);
+            threat.vy_mps += lateral * std::cos(phase * 2.7f);
+            float spd = threat.speed_mps();
+            if (spd > 100.f) {
+                float drag_decel = Ballistics::kAirDensityScale * spd * spd;
+                drag_decel = std::min(drag_decel, 15.f);
+                float scale = std::max(0.f, spd - drag_decel * dt_sec) / spd;
+                threat.vx_mps *= scale;
+                threat.vy_mps *= scale;
+                threat.vz_mps *= scale;
+            }
+        }
+
         threat.x_m += threat.vx_mps * dt_sec;
         threat.y_m += threat.vy_mps * dt_sec;
         threat.z_m += threat.vz_mps * dt_sec;

@@ -17,7 +17,7 @@ float distance3(const State3D& a, const State3D& b) {
 
 float air_density_factor(float altitude_m) {
     if (altitude_m > 15000.f) return 0.f;
-    return kAirDensityScale * (1.f - altitude_m / 15000.f);
+    return Ballistics::kAirDensityScale * (1.f - altitude_m / 15000.f);
 }
 
 State3D apply_drag(State3D s, float dt) {
